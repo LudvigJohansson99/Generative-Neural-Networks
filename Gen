@@ -1,0 +1,232 @@
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn import preprocessing
+from sklearn.datasets import make_blobs
+from sklearn.datasets import make_blobs
+import torch
+def generate_spiral_data(n_samples, seed=0, plot=False, device="cpu"):
+    # Set random seed for reproducibility
+    np.random.seed(seed)
+    # Generate sample data
+    t = 1.0 * np.pi * (1 + 5 * np.random.rand(1, n_samples))
+    x = t * np.cos(t)
+    y = t * np.sin(t)
+    X = np.concatenate((x, y))
+    X += 0.4 * np.random.randn(2, n_samples)
+    X = X.T
+    # Standardize the data
+    scaler = preprocessing.StandardScaler()
+    X = scaler.fit_transform(X)
+    # Convert to PyTorch tensor
+    X = torch.tensor(X, device=device).to(dtype=torch.float32)
+    if plot:
+        # Plot the data
+        plt.scatter(X.to("cpu")[:, 0], X.to("cpu")[:, 1], s=1)
+        plt.xlabel('X1')
+        plt.ylabel('X2')
+        plt.title('Scatter plot of generated data')
+        plt.show()
+    return X
+#############################################################################################################
+def generate_topology_dataset(n_samples_outer=5000, n_samples_inner=2500, n_samples_cluster=1500,
+                         radius_outer=4, radius_inner=3, cluster_std=0.2, plot=False, seed=0, device="cpu"):
+    np.random.seed(seed)
+    # Function to generate points on a circle
+    def generate_circle_points(radius, center, n_samples):
+        theta = np.random.uniform(0, 2 * np.pi, n_samples)
+        x = center[0] + radius * np.cos(theta)
+        y = center[1] + radius * np.sin(theta)
+        return np.column_stack((x, y))
+    # Generate points for the outer circle
+    center_outer = [0, 0]
+    outer_circle = generate_circle_points(radius_outer, center_outer, n_samples_outer) + 0.05*np.random.randn(n_samples_outer, 2)
+    # Generate points for the inner circle
+    center_inner = [0, 0]
+    inner_circle = generate_circle_points(radius_inner, center_inner, n_samples_inner) + 0.05*np.random.randn(n_samples_inner, 2)
+    # Define centers for the square Gaussian clusters inside the inner circle
+    square_centers = 2.* np.array([
+        [0.5, 0.5],
+        [-0.5, 0.5],
+        [-0.5, -0.5],
+        [0.5, -0.5]
+    ])  # scale down to fit within the inner circle
+    # Generate Gaussian clusters
+    clusters = []
+    for center in square_centers:
+        cluster = np.random.normal(loc=center, scale=cluster_std, size=(n_samples_cluster, 2))
+        clusters.append(cluster)
+    clusters = np.vstack(clusters)
+    # Labels:
+    # 0 - Outer Circle
+    # 1 - Inner Circle
+    # 2, 3, 4, 5 - Gaussian Clusters
+    outer_labels = np.zeros(n_samples_outer)
+    inner_labels = np.ones(n_samples_inner)
+    cluster_labels = np.concatenate([np.full(n_samples_cluster, i + 2) for i in range(4)])
+    # Combine all data points
+    all_points = np.vstack((outer_circle, inner_circle, clusters))
+    all_labels = np.concatenate((outer_labels, inner_labels, cluster_labels))
+    # Standardize the data
+    scaler = preprocessing.StandardScaler()
+    X = scaler.fit_transform(all_points)
+    X = torch.tensor(X, device=device).to(dtype=torch.float32)
+    Y = torch.tensor(all_labels, device=device).to(dtype=torch.float32)
+    if plot:
+        # Plot the dataset
+        plt.figure(figsize=(10, 8))
+        #plt.scatter(outer_circle[:, 0], outer_circle[:, 1], c='blue', s=1, label='Outer Circle')
+        #plt.scatter(inner_circle[:, 0], inner_circle[:, 1], c='green', s=1, label='Inner Circle')
+        #plt.scatter(clusters[:, 0], clusters[:, 1], c='red', s=1, label='Square Clusters')
+        plt.scatter(X.to("cpu")[:, 0], X.to("cpu")[:, 1], s=1)
+        plt.title("2D Toy Dataset: Concentric Circles with Square Gaussian Clusters")
+        plt.xlabel("X")
+        plt.ylabel("Y")
+        plt.legend()
+        plt.grid(True)
+        plt.axis('equal')
+        plt.show()
+    return X, Y
+#############################################################################################################
+def generate_checkerboard_data(n_points=20000,
+                               n_classes=2, n=4,
+                               plot=False, seed=0, device="cpu"):
+    np.random.seed(seed)
+    # Generate uniform random points
+    X = np.random.uniform(-(n // 2) * np.pi, (n // 2) * np.pi, size=(n_points, n_classes))
+    # Create a mask based on sine conditions
+    mask = np.logical_or(np.logical_and(np.sin(X[:, 0]) > 0.0, np.sin(X[:, 1]) > 0.0),
+                         np.logical_and(np.sin(X[:, 0]) < 0.0, np.sin(X[:, 1]) < 0.0))
+    Y = np.eye(n_classes)[1 * mask]
+    if plot:
+        plt.figure(figsize=[15, 5])
+        plt.subplot(1, 3, 1)
+        plt.scatter(X[:, 0], X[:, 1], c=Y[:, 0], s=1, cmap="bwr", alpha=0.9)
+        plt.title("Original Data")
+    # Standardize the data
+    scaler = preprocessing.StandardScaler()
+    X = scaler.fit_transform(X)
+    X = torch.tensor(X, device=device).to(dtype=torch.float32)
+    Y = torch.tensor(Y, device=device).to(dtype=torch.float32)
+    if plot:
+        plt.subplot(1, 3, 2)
+        plt.scatter(X.to("cpu")[:, 0], X.to("cpu")[:, 1], c=Y.to("cpu")[:, 0], s=1, cmap="bwr", alpha=0.9)
+        plt.title("Standardized Data")
+    # Separate positive and negative classes
+    pos_indx = torch.where(Y[:, 0] > 0)
+    neg_indx = torch.where(Y[:, 1] > 0)
+    Xneg = X[neg_indx]
+    if plot:
+        plt.subplot(1, 3, 3)
+        plt.scatter(Xneg[:, 0], Xneg[:, 1], s=1, cmap="bwr", alpha=0.9)
+        plt.title("Negative Class Data")
+    X = X[pos_indx]
+    Y = Y[pos_indx]
+    if plot:
+        plt.subplot(1, 3, 3)
+        plt.scatter(X.to("cpu")[:, 0], X.to("cpu")[:, 1], s=1, cmap="bwr", alpha=0.9)
+        plt.title("Positive Class Data")
+    if plot:
+        plt.show()
+    return X, Xneg, Y
+#############################################################################################################
+def generate_circles_in_circles_data(n_samples=10000, plot=False, seed=0, device="cpu"):
+    np.random.seed(seed)
+    # Generate two sets of circle data
+    X1, y1 = datasets.make_circles(n_samples=n_samples//2, factor=0.6, noise=0.03, random_state=seed)
+    X1 = 1.9 * X1
+    X2, y2 = datasets.make_circles(n_samples=n_samples//2, factor=0.4, noise=0.05, random_state=seed)
+    X2 = 0.5 * X2
+    y2 = y2+2
+    '''
+    if plot:
+        plt.figure(figsize=(10, 5))
+        plt.subplot(1, 2, 1)
+        plt.scatter(X1[:, 0], X1[:, 1], s=1, label='Circle 1')
+        plt.scatter(X2[:, 0], X2[:, 1], s=1, label='Circle 2')
+        plt.legend()
+        plt.title("Original Circles Data")
+    '''
+    # Combine the data
+    X = np.vstack([X1, X2])
+    y = np.hstack([y1, y2])
+    # Standardize the data
+    scaler = preprocessing.StandardScaler()
+    X = scaler.fit_transform(X)
+    X = torch.tensor(X, device=device).to(dtype=torch.float32)
+    if plot:
+        plt.subplot(1, 2, 2)
+        plt.scatter(X[:, 0], X[:, 1], s=1, c=y)
+        plt.title("Standardized Data")
+        plt.show()
+    return X, y
+#############################################################################################################
+def generate_moons_data(n_samples=10000, noise=0.05, plot=False, seed=0, device="cpu"):
+    # Generate moons data
+    X, y = datasets.make_moons(noise=noise, random_state=seed, n_samples=n_samples)
+     # Standardize the data
+    scaler = preprocessing.StandardScaler()
+    X = scaler.fit_transform(X)
+    # Convert to PyTorch tensor
+    X = torch.tensor(X, device=device).to(dtype=torch.float32)
+    if plot:
+        plt.figure(figsize=(6, 6))
+        plt.scatter(X[:, 0], X[:, 1], s=1,c =y, cmap="bwr")
+        plt.title("Moons Dataset")
+        plt.xlabel("X1")
+        plt.ylabel("X2")
+        plt.grid(True)
+        plt.show()
+    return X, y
+#############################################################################################################
+def generate_GMMs_data(n_components=8, radius=1, n_samples=100, cluster_std=0.1, plot=False, seed=42, device="cpu"):
+    np.random.seed(seed)
+    # Calculate the angles
+    angles = np.linspace(0, 2 * np.pi, n_components, endpoint=False)
+    # Generate means
+    means = np.array([(np.cos(angle) * radius, np.sin(angle) * radius) for angle in angles])
+    # Generate synthetic data
+    X, y = make_blobs(n_samples=n_samples * n_components, centers=means, cluster_std=cluster_std, random_state=seed)
+    # Standardize the data
+    scaler = preprocessing.StandardScaler()
+    X = scaler.fit_transform(X)
+     # Standardize the data
+    scaler = preprocessing.StandardScaler()
+    means = scaler.fit_transform(means)
+    # Convert to PyTorch tensor
+    X = torch.tensor(X, device=device).to(dtype=torch.float32)
+    y = torch.tensor(y, device=device).to(dtype=torch.float32)
+    if plot:
+        plt.figure(figsize=(8, 8))
+        plt.scatter(X.to("cpu")[:, 0], X.to("cpu")[:, 1], c=y.to("cpu"), cmap='tab10', s=1)
+        plt.title('Synthetic 2D Toy Dataset with 8-component GMM')
+        plt.xlabel('X1')
+        plt.ylabel('X2')
+        plt.grid(True)
+        plt.axis('equal')
+        plt.show()
+    return X, y
+#####
+###
+#Usage
+# Iimport this function
+# or copy & paste it into a notebook
+def generate_data(dataset_type, n_samples=10000, plot=True, device="cpu"):
+    if dataset_type == "spiral":
+        X = generate_spiral_data(n_samples=n_samples, plot=plot, device=device)
+        y = None  # Since `generate_spiral_data` doesn't return labels
+    elif dataset_type == "topology":
+        X, y = generate_topology_dataset(plot=plot, device=device)
+    elif dataset_type == "checkerboard":
+        X, Xneg, Y = generate_checkerboard_data(plot=plot, device=device)
+        return X, Xneg, Y  # Return different variables for checkerboard
+    elif dataset_type == "circles_in_circles":
+        X, y = generate_circles_in_circles_data(plot=plot, device=device)
+    elif dataset_type == "moons":
+        X, y = generate_moons_data(n_samples=n_samples, plot=plot, device=device)
+    elif dataset_type == "GMMs":
+        X, y = generate_GMMs_data(n_samples=n_samples, plot=plot, device=device)
+    else:
+        raise ValueError(f"Unknown dataset type: {dataset_type}")
+    return X, y
+###
+#############################################################################################################
